@@ -33,6 +33,7 @@ defmodule Unit.CompilerCache.TTLTest do
     info = GenServer.call(ExpressionCache, :wait_for_completion)
     assert 8 == info.slots_remaining
     assert 2 == info.cache_size
+    assert 2 == info.ttl_size
 
     # cache hit
     assert 2 = ExpressionCache.execute("2 * arg", 1)
@@ -41,11 +42,12 @@ defmodule Unit.CompilerCache.TTLTest do
     info = GenServer.call(ExpressionCache, :wait_for_completion)
     assert 8 == info.slots_remaining
     assert 2 == info.cache_size
+    assert 2 == info.ttl_size
 
   end
 
   test "test expire oldest expressions" do
-    {:ok, pid} = ExpressionCache.start_link()
+    {:ok, _} = ExpressionCache.start_link()
 
     assert 0 == :ets.info(ExpressionCache.ttl_table, :size)
 
@@ -60,9 +62,6 @@ defmodule Unit.CompilerCache.TTLTest do
     oldest_ttl = info.oldest_ttl
 
     # Now when we compile a new expression, the oldest one should be gone from the TTL cache.
-
-    info = GenServer.call(ExpressionCache, :wait_for_completion)
-
     assert 3 == ExpressionCache.execute("1 + 2", 1)
     info = GenServer.call(ExpressionCache, :wait_for_completion)
 

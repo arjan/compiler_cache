@@ -15,26 +15,26 @@ defmodule CompilerCache do
 
   ## Usage
 
-      defmodule MyExpressionParser do
-        use CompilerCache
+  defmodule MyExpressionParser do
+  use CompilerCache
 
-        def create_ast(expression) do
-          # Create your AST here based on the expression.
-        end
+  def create_ast(expression) do
+  # Create your AST here based on the expression.
+  end
 
-      end
+  end
 
 
   ## Configuration
 
   - max_size - how many entries we can have in the cache table;
-    defaults to 10_000.
+  defaults to 10_000.
 
   - cache_misses - after how many cache misses the compiler should
-    start compiling the module. Defaults to 2.
+  start compiling the module. Defaults to 2.
 
   - max_ttl - how long entries are allowed to linger in the cache
-    (without being called), in seconds. Defaults to 10.
+  (without being called), in seconds. Defaults to 10.
 
 
   """
@@ -57,11 +57,11 @@ defmodule CompilerCache do
     # check if we have a ETS table hit
     case :ets.lookup(module.cache_table, key) do
       [] ->
-        # insert the ETS row
-        if increase_hit_count(module, key) do
-          # ping the module to compile it
-          GenServer.cast(module, {:compile, key, expression})
-        end
+      # insert the ETS row
+      if increase_hit_count(module, key) do
+        # ping the module to compile it
+        GenServer.cast(module, {:compile, key, expression})
+      end
         eval_quoted(module, expression, arg)
 
       [{^key, compiled_module, ttl}] ->
@@ -73,23 +73,25 @@ defmodule CompilerCache do
     end
   end
 
-  defp id(expression), do: :erlang.term_to_binary(expression) |> Base.encode64
+  defp id(expression) do
+    :crypto.hash(:sha, :erlang.term_to_binary(expression))
+  end
 
   defp increase_hit_count(module, key) do
     cond do
-      module.cache_misses == :never ->
+      module.cache_misses == :none ->
         false
       module.cache_misses < 1 ->
         true
       true ->
         hit_count = case :ets.lookup(module.hit_ctr_table, key) do
-                    [] ->
-                      :ets.insert(module.hit_ctr_table, {key, 1})
-                      1
-                    [{^key, ctr}] ->
-                      :ets.update_element(module.hit_ctr_table, key, {2, ctr+1})
-                      ctr + 1
-                  end
+                      [] ->
+                        :ets.insert(module.hit_ctr_table, {key, 1})
+                        1
+                      [{^key, ctr}] ->
+                        :ets.update_element(module.hit_ctr_table, key, {2, ctr+1})
+                        ctr + 1
+                    end
         module.cache_misses <= hit_count
     end
   end
@@ -124,16 +126,20 @@ defmodule CompilerCache do
   end
 
   def handle_cast({:cache_hit, key, mod_name, old_ttl}, state) do
-    ttl = :erlang.monotonic_time
-    if :ets.update_element(state.module.cache_table, key, {@ttl_pos, ttl}) do
-        # remove entry from TTL table;
+    case :ets.lookup(state.module.ttl_table, old_ttl) do
+      [] -> # ignore
+        :ok
+      [{^old_ttl, _, _}] ->
+        ttl = :erlang.monotonic_time
+
+        # update TTL in cache table
+        :ets.update_element(state.module.cache_table, key, {@ttl_pos, ttl})
+
+        # remove entry from TTL table
         :ets.delete(state.module.ttl_table, old_ttl)
+
         # add new entry in TTL table
         :ets.insert(state.module.ttl_table, {ttl, key, mod_name})
-        Logger.warn "hit! #{ttl}"
-
-    else
-      :nop
     end
     {:noreply, state}
   end
@@ -245,7 +251,7 @@ defmodule CompilerCache do
 
   defp purge(ttl, state) do
     [{_, key, mod_name}] = :ets.lookup(state.module.ttl_table, ttl)
-    Logger.warn "purge: #{mod_name} #{inspect key}"
+    # Logger.debug "purge: #{mod_name} #{inspect key}"
     :code.purge(mod_name)
     true = :code.delete(mod_name)
     :ets.delete(state.module.ttl_table, ttl)
@@ -261,6 +267,7 @@ defmodule CompilerCache do
   @default_max_ttl 1000
 
   defmacro __using__(opts) do
+
     quote do
       alias CompilerCache
 
@@ -268,9 +275,9 @@ defmodule CompilerCache do
       def cache_misses, do: unquote(opts[:cache_misses] || @default_cache_misses)
       def max_ttl, do: unquote(opts[:max_ttl] || @default_max_ttl)
 
-      def cache_table, do: unquote(Module.concat(__MODULE__, Cache))
-      def ttl_table, do: unquote(Module.concat(__MODULE__, TTL))
-      def hit_ctr_table, do: unquote(Module.concat(__MODULE__, HitCount))
+      def cache_table, do: unquote(Module.concat(__CALLER__.module, Cache))
+      def ttl_table, do: unquote(Module.concat(__CALLER__.module, TTL))
+      def hit_ctr_table, do: unquote(Module.concat(__CALLER__.module, HitCount))
 
       @behaviour CompilerCache
 

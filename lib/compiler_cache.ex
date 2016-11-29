@@ -127,7 +127,7 @@ defmodule CompilerCache do
     # Create an atom table and fill it
     atom_table = :ets.new(:compiler_cache_atom_table, [])
     for n <- 1..module.max_size do
-      atom = String.to_atom("CompilerCache.#{module}.#{n}")
+      atom = Module.concat(module, "Cache#{n}")
       :ets.insert(atom_table, {atom})
     end
     :timer.send_interval(1000, :ttl_check)
@@ -194,7 +194,7 @@ defmodule CompilerCache do
   defp purge_loop(:"$end_of_table", _state), do: :ok
   defp purge_loop(ttl, state) do
     delta = div((:erlang.monotonic_time - ttl), 1_000_000)
-    if delta < state.module.max_ttl do
+    if delta > state.module.max_ttl do
       {:ok, _mod_name, ttl} = purge(ttl, state)
       purge_loop(ttl, state)
     end

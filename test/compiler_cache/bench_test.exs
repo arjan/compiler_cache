@@ -53,6 +53,10 @@ defmodule Unit.CompilerCache.BenchTest do
     # Make an assumption about the speed improvement
     assert 4 * t2 < t1
 
+    for n <- 1..1_000_000 do
+      CompiledCache.execute(@expr, n)
+    end
+
   end
 
 end

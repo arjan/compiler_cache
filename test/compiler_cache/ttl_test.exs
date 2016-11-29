@@ -72,7 +72,7 @@ defmodule Unit.CompilerCache.TTLTest do
     prev_loaded_modules = info.loaded_modules
 
     # wait 2 seconds until purge has finished
-    :timer.sleep(1000)
+    :timer.sleep(2000)
 
     info = GenServer.call(ExpressionCache, :wait_for_completion)
 

@@ -101,9 +101,14 @@ defmodule CompilerCache do
   end
 
   defp eval_quoted(module, expression, input) do
-    {ast, meta} = module.create_ast(expression)
-    {result, _} = Code.eval_quoted(ast, [input: input], meta)
-    result
+    try do
+      {ast, meta} = module.create_ast(expression)
+      {result, _} = Code.eval_quoted(ast, [input: input], meta)
+      result
+    rescue
+      e ->
+        module.handle_error(e)
+    end
   end
 
   ##
@@ -155,8 +160,9 @@ defmodule CompilerCache do
           try do
             mod_compile(mod_name, key, expression, state)
           rescue
-            e ->
-              Logger.error "Compilation error: #{inspect expression}"
+            _ ->
+              # Errors are logged in the synchronous (eval_quoted) flow
+              :ok
           end
         {:error, :empty} ->
           {:ok, _, _} = purge(state)

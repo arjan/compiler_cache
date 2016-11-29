@@ -70,6 +70,8 @@ defmodule Unit.CompilerCache.TTLTest do
     assert 10 == info.cache_size
     assert oldest_ttl < info.oldest_ttl
 
+    prev_loaded_modules = info.loaded_modules
+
     # wait 2 seconds until purge has finished
     :timer.sleep(1000)
 
@@ -77,6 +79,9 @@ defmodule Unit.CompilerCache.TTLTest do
 
     assert 10 == info.slots_remaining
     assert 0 == info.cache_size
+
+    # there should have been some cleanup taken place
+    assert info.loaded_modules < prev_loaded_modules
 
   end
 

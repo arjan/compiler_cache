@@ -39,6 +39,7 @@ defmodule CompilerCache do
 
   """
 
+  @module_pos 2
   @ttl_pos 3
 
   @callback create_ast(any) :: term()
@@ -55,24 +56,43 @@ defmodule CompilerCache do
 
     # check if we have a ETS table hit
     case :ets.lookup(module.cache_table, key) do
-    #case [] do
+      [] ->
+        # insert the ETS row
+        if increase_hit_count(module, key) do
+          # ping the module to compile it
+          GenServer.cast(module, {:compile, key, expression})
+        end
+        eval_quoted(module, expression, arg)
+
       [{^key, compiled_module, ttl}] ->
         # .. if so; ping the module to register cache hit (LRU)
         GenServer.cast(module, {:cache_hit, key, compiled_module, ttl})
         # return fn
         compiled_module.eval(arg)
-      [] ->
-        # .. else, ping the module to compile it
-        # Logger.warn "miss: #{inspect key}"
 
-        GenServer.cast(module, {:compile, key, expression})
-
-        # ... return the eval_quoted version
-        eval_quoted(module, expression, arg)
     end
   end
 
   defp id(expression), do: :erlang.term_to_binary(expression) |> Base.encode64
+
+  defp increase_hit_count(module, key) do
+    cond do
+      module.cache_misses == :never ->
+        false
+      module.cache_misses < 1 ->
+        true
+      true ->
+        hit_count = case :ets.lookup(module.hit_ctr_table, key) do
+                    [] ->
+                      :ets.insert(module.hit_ctr_table, {key, 1})
+                      1
+                    [{^key, ctr}] ->
+                      :ets.update_element(module.hit_ctr_table, key, {2, ctr+1})
+                      ctr + 1
+                  end
+        module.cache_misses <= hit_count
+    end
+  end
 
   defp eval_quoted(module, expression, arg) do
     {ast, meta} = module.create_ast(expression)
@@ -90,6 +110,7 @@ defmodule CompilerCache do
     Code.compiler_options(ignore_module_conflict: true)
 
     :ets.new(module.cache_table, [:named_table, {:read_concurrency, true}])
+    :ets.new(module.hit_ctr_table, [:named_table, :public, {:write_concurrency, true}, {:read_concurrency, true}])
     :ets.new(module.ttl_table, [:named_table, :private, :ordered_set])
 
     # Create an atom table and fill it
@@ -123,7 +144,7 @@ defmodule CompilerCache do
         {:ok, mod_name} ->
           mod_compile(mod_name, key, expression, state)
         {:error, :empty} ->
-          mod_name = purge(state)
+          {:ok, _, _} = purge(state)
           handle_cast({:compile, key, expression}, state)
       end
     end
@@ -136,7 +157,9 @@ defmodule CompilerCache do
       slots_remaining: :ets.info(state.atom_table, :size),
       cache_size: :ets.info(state.module.cache_table, :size),
       ttl_size: :ets.info(state.module.ttl_table, :size),
-      oldest_ttl: :ets.first(state.module.ttl_table)
+      hit_ctr_size: :ets.info(state.module.hit_ctr_table, :size),
+      oldest_ttl: :ets.first(state.module.ttl_table),
+      loaded_modules: Enum.count(:code.all_loaded)
     }
     {:reply, stats, state}
   end
@@ -147,7 +170,7 @@ defmodule CompilerCache do
     {:noreply, state}
   end
 
-  defp purge_loop(:"$end_of_table", state), do: :ok
+  defp purge_loop(:"$end_of_table", _state), do: :ok
   defp purge_loop(ttl, state) do
     delta = div((:erlang.monotonic_time - ttl), 1_000_000)
     if delta < state.module.max_ttl do
@@ -176,7 +199,7 @@ defmodule CompilerCache do
     end
 
     result = try do
-               {:module, ^mod_name, _, _} = Module.create(mod_name, code, [file: IO.inspect(expression), line: 1])
+               {:module, ^mod_name, _, _} = Module.create(mod_name, code, [file: "#{inspect(expression)}", line: 1])
                :ok
              rescue
                error in CompileError ->
@@ -184,6 +207,12 @@ defmodule CompilerCache do
                {:error, error}
              end
     if result == :ok do
+
+      # Remove from hit counter table
+      if :ets.lookup(state.module.hit_ctr_table, key) != [] do
+        :ets.delete(state.module.hit_ctr_table, key)
+      end
+
       ttl = :erlang.monotonic_time
       # Put it in the cache table
       :ets.insert(state.module.cache_table, {key, mod_name, ttl})
@@ -241,6 +270,7 @@ defmodule CompilerCache do
 
       def cache_table, do: unquote(Module.concat(__MODULE__, Cache))
       def ttl_table, do: unquote(Module.concat(__MODULE__, TTL))
+      def hit_ctr_table, do: unquote(Module.concat(__MODULE__, HitCount))
 
       @behaviour CompilerCache
 

@@ -35,7 +35,8 @@ iex> MyExpressionCache.execute("2 * input", 3)
 6
 ```
 
-The input argument is always called 'input'.
+The input argument is always called 'input'. There is just one input
+argument - use a tuple and pattern matching to use multiple arguments.
 
 After *N* cache misses (default: 2), expressions are cached into a
 module on the background by the compiler process. This speeds up

@@ -17,7 +17,7 @@ defmodule Unit.CompilerCache.CacheMissesTest do
     {:ok, _} = ExpressionCache.start_link()
 
     # cache miss #1
-    assert 2 = ExpressionCache.execute("1 + arg", 1)
+    assert 2 = ExpressionCache.execute("1 + input", 1)
 
     info = GenServer.call(ExpressionCache, :wait_for_completion)
     assert 10 == info.slots_remaining
@@ -26,7 +26,7 @@ defmodule Unit.CompilerCache.CacheMissesTest do
 
 
     # cache miss #2
-    assert 6 = ExpressionCache.execute("1 + arg", 5)
+    assert 6 = ExpressionCache.execute("1 + input", 5)
 
     info = GenServer.call(ExpressionCache, :wait_for_completion)
     assert 10 == info.slots_remaining
@@ -34,7 +34,7 @@ defmodule Unit.CompilerCache.CacheMissesTest do
     assert 1 == info.hit_ctr_size
 
     # cache miss #3
-    assert 6 = ExpressionCache.execute("1 + arg", 5)
+    assert 6 = ExpressionCache.execute("1 + input", 5)
 
     info = GenServer.call(ExpressionCache, :wait_for_completion)
     # but now it has compiled the expression

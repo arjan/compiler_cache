@@ -36,8 +36,8 @@ defmodule Unit.CompilerCacheTest do
     {:ok, _} = ExpressionCache.start_link()
 
     # cache miss
-    assert 2 = ExpressionCache.execute("1 + arg", 1)
-    assert 5 = ExpressionCache.execute("1 + arg", 4)
+    assert 2 = ExpressionCache.execute("1 + input", 1)
+    assert 5 = ExpressionCache.execute("1 + input", 4)
   end
 
 end

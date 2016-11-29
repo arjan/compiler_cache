@@ -26,7 +26,7 @@ defmodule Unit.CompilerCache.BenchTest do
 
 
   @n 10_000
-  @expr "1000 + arg"
+  @expr "1000 + input"
 
   test "benchmark " do
     {:ok, _} = NeverCompiledCache.start_link()

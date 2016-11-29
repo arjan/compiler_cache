@@ -20,7 +20,7 @@ defmodule Unit.CompilerCache.TTLTest do
     # assert 0 == :ets.info(ExpressionCache.ttl_table, :size)
 
     # cache miss
-    assert 2 = ExpressionCache.execute("1 + arg", 1)
+    assert 2 = ExpressionCache.execute("1 + input", 1)
 
     # it's compiling
     info = GenServer.call(ExpressionCache, :wait_for_completion)
@@ -28,7 +28,7 @@ defmodule Unit.CompilerCache.TTLTest do
     assert 1 == info.cache_size
 
     # compile another one
-    assert 8 = ExpressionCache.execute("2 * arg", 4)
+    assert 8 = ExpressionCache.execute("2 * input", 4)
 
     info = GenServer.call(ExpressionCache, :wait_for_completion)
     assert 8 == info.slots_remaining
@@ -36,7 +36,7 @@ defmodule Unit.CompilerCache.TTLTest do
     assert 2 == info.ttl_size
 
     # cache hit
-    assert 2 = ExpressionCache.execute("2 * arg", 1)
+    assert 2 = ExpressionCache.execute("2 * input", 1)
 
     # stats stay the same
     info = GenServer.call(ExpressionCache, :wait_for_completion)

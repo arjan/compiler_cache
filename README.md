@@ -14,7 +14,7 @@ Creating a compilation cache is as simple as `use CompilerCache` and
 implementing the `create_ast/1` function:
 
 ```elixir
-defmodule ExpressionCache do
+defmodule MyExpressionCache do
   use CompilerCache
   def create_ast(expr) do
     {:ok, ast} = Code.string_to_quoted(expr)
@@ -28,17 +28,24 @@ The `create_ast/2` function must return an `{ast, opts}` tuple. The opts are the
 This cache can then be called like this:
 
 ```elixir
-{:ok, _} = ExpressionCache.start_link()
-iex> ExpressionCache.execute("1 + 1", nil)
+{:ok, _} = MyExpressionCache.start_link()
+iex> MyExpressionCache.execute("1 + 1", nil)
 2
-iex> ExpressionCache.execute("2 * input", 3)
+iex> MyExpressionCache.execute("2 * input", 3)
 6
 ```
+
+The input argument is always called 'input'.
 
 After *N* cache misses (default: 2), expressions are cached into a
 module on the background by the compiler process. This speeds up
 consecutive executions considerable (~10x speedups are not unheard
 of).
+
+Cached expressions (modules) are unloaded when they have not been used
+after *max_ttl* milliseconds (default: 1000).
+
+The number of cached expressions can be
 
 
 
@@ -61,3 +68,10 @@ If [available in Hex](https://hex.pm/docs/publish), the package can be installed
       [applications: [:compiler_cache]]
     end
     ```
+
+  3. Implement your compiler by using `use CompilerCache` and
+     implementing `create_ast/1`, then put it in your supervisor tree:
+
+     ```
+     worker(MyExpressionCache, [])
+     ```

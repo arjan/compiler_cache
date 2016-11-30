@@ -14,6 +14,8 @@ system compiles given ASTs into modules.
 The compilation cache has a fixed maximum size, and uses a fixed pool
 of module names as not to exhaust the BEAM vm's atom table.
 
+## Usage
+
 Creating a compilation cache is as simple as `use CompilerCache` and
 implementing the `create_ast/1` function:
 
@@ -42,21 +44,23 @@ iex> MyExpressionCache.execute("2 * input", 3)
 The input argument is always called 'input'. There is just one input
 argument - use a tuple and pattern matching to use multiple arguments.
 
-After *N* cache misses (default: 2), expressions are cached into a
-module on the background by the compiler process. This speeds up
-consecutive executions considerable (~10x speedups are not unheard
-of).
+After *N* cache misses (default: 1, so the second time the same
+expression is called), expressions are cached into a module on the
+background by the compiler process. This speeds up consecutive
+executions considerable (~10x speedups are not unheard of).
 
 Cached expressions (modules) are unloaded when they have not been used
 after *max_ttl* milliseconds (default: 1000).
 
-The number of cached expressions can be
+The number of cached expressions can be limited by setting the
+*cache_size* option, which defaults to 10_000.
 
+Full documentation: https://hexdocs.pm/compiler_cache/
 
 
 ## Installation
 
-If [available in Hex](https://hex.pm/docs/publish), the package can be installed as:
+The package is available on hex.pm and can be installed like this:
 
   1. Add `compiler_cache` to your list of dependencies in `mix.exs`:
 

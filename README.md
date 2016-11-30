@@ -1,5 +1,9 @@
 # CompilerCache
 
+[![Build Status](https://travis-ci.org/arjan/decorator.png?branch=master)](https://travis-ci.org/arjan/compiler_cache)
+[![Hex pm](http://img.shields.io/hexpm/v/compiler_cache.svg?style=flat)](https://hex.pm/packages/compiler_cache)
+
+
 LRU cache for compiling expressions into functions.
 
 Using `CompilerCache`, it is easy to create custom expressions that perform well.

@@ -42,7 +42,9 @@ iex> MyExpressionCache.execute("2 * input", 3)
 ```
 
 The input argument is always called 'input'. There is just one input
-argument - use a tuple and pattern matching to use multiple arguments.
+argument - use a tuple and pattern matching to use multiple
+arguments. To use a different variable name, use the `:input_name`
+config option in the `use` statement.
 
 After *N* cache misses (default: 1, so the second time the same
 expression is called), expressions are cached into a module on the

@@ -16,7 +16,7 @@ defmodule Unit.CompilerCache.TTLTest do
   test "immediately compile an expression" do
     {:ok, _} = ExpressionCache.start_link()
 
-    assert 0 == :ets.info(ExpressionCache.cache_table, :size)
+    assert 0 == :ets.info(ExpressionCache.config.cache_table, :size)
     # assert 0 == :ets.info(ExpressionCache.ttl_table, :size)
 
     # cache miss
@@ -49,7 +49,7 @@ defmodule Unit.CompilerCache.TTLTest do
   test "test expire oldest expressions" do
     {:ok, _} = ExpressionCache.start_link()
 
-    assert 0 == :ets.info(ExpressionCache.ttl_table, :size)
+    assert 0 == :ets.info(ExpressionCache.config.ttl_table, :size)
 
     # Create 10 expressions; filling the cache table
     for n <- 1..10 do

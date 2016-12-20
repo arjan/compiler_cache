@@ -13,10 +13,10 @@ defmodule Unit.CompilerCacheTest do
   end
 
 
-  test "Generated accessor functions with default" do
-    assert 10_000 == ExpressionCache.max_size
-    assert 1 == ExpressionCache.cache_misses
-    assert 1000 == ExpressionCache.max_ttl
+  test "Generated config with defaults" do
+    assert 10_000 == ExpressionCache.config.max_size
+    assert 1 == ExpressionCache.config.cache_misses
+    assert 1000 == ExpressionCache.config.max_ttl
   end
 
   test "Override cache options" do
@@ -26,9 +26,9 @@ defmodule Unit.CompilerCacheTest do
       def create_ast(_expr), do: nil
     end
 
-    assert 66 == MyCache.max_size
-    assert 10 == MyCache.cache_misses
-    assert 123 == MyCache.max_ttl
+    assert 66 == MyCache.config.max_size
+    assert 10 == MyCache.config.cache_misses
+    assert 123 == MyCache.config.max_ttl
 
   end
 

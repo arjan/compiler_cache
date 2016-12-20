@@ -15,16 +15,15 @@ defmodule CompilerCache do
 
   ## Example usage
 
-  defmodule MyExpressionParser do
-  use CompilerCache
+      defmodule MyExpressionParser do
+        use CompilerCache
 
-  def create_ast(expression) do
-  # Create your AST here based on the expression, e.g.:
-  {:ok, ast} = Code.string_to_quoted(expr)
-  {ast, []}
-  end
-
-  end
+        def create_ast(expression) do
+          # Create your AST here based on the expression, e.g.:
+          {:ok, ast} = Code.string_to_quoted(expr)
+          {ast, []}
+        end
+      end
 
   ## Configuration
 
@@ -34,6 +33,9 @@ defmodule CompilerCache do
   use CompilerCache, [max_size: 1000, cache_misses: 0]
 
   The possible options are:
+
+  - `input_name` - The name of the variable that's being used for the
+  input to the compiled function. Defaults to `input`.
 
   - `max_size` - how many entries we can have in the cache table;
   defaults to 10_000.
@@ -67,31 +69,31 @@ defmodule CompilerCache do
   require Logger
 
   @doc false
-  def start_link(module) do
-    GenServer.start_link(__MODULE__, module, name: module)
+  def start_link(mod_def) do
+    GenServer.start_link(__MODULE__, mod_def, name: mod_def.module)
   end
 
   @doc false
-  def execute(module, expression, input) do
+  def execute(mod_def, expression, input) do
     key = id(expression)
 
     # check if we have a ETS table hit
-    case :ets.lookup(module.cache_table, key) do
+    case :ets.lookup(mod_def.cache_table, key) do
       [] ->  # insert the ETS row
-        if increase_hit_count(module, key) do
+        if increase_hit_count(mod_def, key) do
           # ping the module to compile it when we reach the compilation limit
-          GenServer.cast(module, {:compile, key, expression})
+          GenServer.cast(mod_def.module, {:compile, key, expression})
         end
 
         try do
-          eval_quoted(module, expression, input)
+          eval_quoted(mod_def, expression, input)
         rescue
-          error -> module.handle_error(error)
+          error -> mod_def.module.handle_error(error)
         end
 
       [{^key, compiled_module, ttl}] ->
         # .. if so; ping the module to register cache hit (LRU)
-        GenServer.cast(module, {:cache_hit, key, compiled_module, ttl})
+        GenServer.cast(mod_def.module, {:cache_hit, key, compiled_module, ttl})
         # return fn
         compiled_module.eval(input)
 
@@ -102,26 +104,26 @@ defmodule CompilerCache do
     :crypto.hash(:sha, :erlang.term_to_binary(expression))
   end
 
-  defp increase_hit_count(module, key) do
-    case module.cache_misses do
+  defp increase_hit_count(mod_def, key) do
+    case mod_def.cache_misses do
       :none ->
         false
       cache_misses ->
-        case :ets.lookup(module.hit_ctr_table, key) do
+        case :ets.lookup(mod_def.hit_ctr_table, key) do
           [] ->
-            :ets.insert(module.hit_ctr_table, {key, 1})
+            :ets.insert(mod_def.hit_ctr_table, {key, 1})
             cache_misses < 1
           [{^key, ctr}] ->
-            :ets.update_element(module.hit_ctr_table, key, {2, ctr+1})
+            :ets.update_element(mod_def.hit_ctr_table, key, {2, ctr+1})
             cache_misses == ctr
         end
     end
   end
 
-  defp eval_quoted(module, expression, input) do
+  defp eval_quoted(mod_def = %{module: module}, expression, input) do
     try do
       {ast, meta} = module.create_ast(expression)
-      {result, _} = Code.eval_quoted(ast, [input: input], meta)
+      {result, _} = Code.eval_quoted(ast, [{mod_def.input_name, input}], meta)
       result
     rescue
       e ->
@@ -133,41 +135,41 @@ defmodule CompilerCache do
 
   defmodule State do
     @moduledoc false
-    defstruct module: nil, atom_table: nil, compiling: MapSet.new, waiters: []
+    defstruct def: nil, atom_table: nil, compiling: MapSet.new, waiters: []
   end
 
-  def init(module) do
+  def init(mod_def) do
     Code.compiler_options(ignore_module_conflict: true)
 
-    :ets.new(module.cache_table, [:named_table, :public, {:read_concurrency, true}])
-    :ets.new(module.hit_ctr_table, [:named_table, :public, {:write_concurrency, true}, {:read_concurrency, true}])
-    :ets.new(module.ttl_table, [:named_table, :public, :ordered_set])
+    :ets.new(mod_def.cache_table, [:named_table, :public, {:read_concurrency, true}])
+    :ets.new(mod_def.hit_ctr_table, [:named_table, :public, {:write_concurrency, true}, {:read_concurrency, true}])
+    :ets.new(mod_def.ttl_table, [:named_table, :public, :ordered_set])
 
     # Create an atom table and fill it
     atom_table = :ets.new(:compiler_cache_atom_table, [])
-    for n <- 1..module.max_size do
-      atom = Module.concat(module, "Cache#{n}")
+    for n <- 1..mod_def.max_size do
+      atom = Module.concat(mod_def.module, "Cache#{n}")
       :ets.insert(atom_table, {atom})
     end
     :timer.send_interval(1000, :ttl_check)
-    {:ok, %State{module: module, atom_table: atom_table}}
+    {:ok, %State{def: mod_def, atom_table: atom_table}}
   end
 
   def handle_cast({:cache_hit, key, mod_name, old_ttl}, state) do
-    case :ets.lookup(state.module.ttl_table, old_ttl) do
+    case :ets.lookup(state.def.ttl_table, old_ttl) do
       [] -> # ignore
         :ok
       [{^old_ttl, _, _}] ->
         ttl = :erlang.monotonic_time
 
         # update TTL in cache table
-        :ets.update_element(state.module.cache_table, key, {@ttl_pos, ttl})
+        :ets.update_element(state.def.cache_table, key, {@ttl_pos, ttl})
 
         # remove entry from TTL table
-        :ets.delete(state.module.ttl_table, old_ttl)
+        :ets.delete(state.def.ttl_table, old_ttl)
 
         # add new entry in TTL table
-        :ets.insert(state.module.ttl_table, {ttl, key, mod_name})
+        :ets.insert(state.def.ttl_table, {ttl, key, mod_name})
     end
     {:noreply, state}
   end
@@ -210,7 +212,7 @@ defmodule CompilerCache do
 
   def handle_info(:ttl_check, state) do
     if :ets.info(state.atom_table, :size) == 0 do
-      oldest_ttl = :ets.first(state.module.ttl_table)
+      oldest_ttl = :ets.first(state.def.ttl_table)
       purge_loop(oldest_ttl, state)
     end
     {:noreply, state}
@@ -230,7 +232,7 @@ defmodule CompilerCache do
   defp purge_loop(:"$end_of_table", _state), do: :ok
   defp purge_loop(ttl, state) do
     delta = div((:erlang.monotonic_time - ttl), 1_000_000)
-    if delta > state.module.max_ttl do
+    if delta > state.def.max_ttl do
       {:ok, _mod_name, ttl} = purge(ttl, state)
       purge_loop(ttl, state)
     end
@@ -239,10 +241,10 @@ defmodule CompilerCache do
   defp stats(state) do
     %{
       slots_remaining: :ets.info(state.atom_table, :size),
-      cache_size: :ets.info(state.module.cache_table, :size),
-      ttl_size: :ets.info(state.module.ttl_table, :size),
-      hit_ctr_size: :ets.info(state.module.hit_ctr_table, :size),
-      oldest_ttl: :ets.first(state.module.ttl_table),
+      cache_size: :ets.info(state.def.cache_table, :size),
+      ttl_size: :ets.info(state.def.ttl_table, :size),
+      hit_ctr_size: :ets.info(state.def.hit_ctr_table, :size),
+      oldest_ttl: :ets.first(state.def.ttl_table),
       loaded_modules: Enum.count(:code.all_loaded)
     }
   end
@@ -253,7 +255,7 @@ defmodule CompilerCache do
 
   defp mod_compile(mod_name, key, expression, state) do
 
-    {expression_ast, context} = state.module.create_ast(expression)
+    {expression_ast, context} = state.def.module.create_ast(expression)
 
     imports = context
     |> context_sort()
@@ -261,7 +263,7 @@ defmodule CompilerCache do
       quote do import unquote(mod), only: unquote(fns) end
     end)
 
-    vars = Macro.var(:input, nil)
+    vars = Macro.var(state.def.input_name, nil)
     code = quote do
       unquote_splicing(imports)
 
@@ -275,15 +277,15 @@ defmodule CompilerCache do
     {:module, ^mod_name, _, _} = Module.create(mod_name, code, [file: "#{inspect(expression)}", line: 1])
 
     # Remove from hit counter table
-    if :ets.lookup(state.module.hit_ctr_table, key) != [] do
-      :ets.delete(state.module.hit_ctr_table, key)
+    if :ets.lookup(state.def.hit_ctr_table, key) != [] do
+      :ets.delete(state.def.hit_ctr_table, key)
     end
 
     ttl = :erlang.monotonic_time
     # Put it in the cache table
-    :ets.insert(state.module.cache_table, {key, mod_name, ttl})
+    :ets.insert(state.def.cache_table, {key, mod_name, ttl})
     # And in the TTL table
-    :ets.insert(state.module.ttl_table, {ttl, key, mod_name})
+    :ets.insert(state.def.ttl_table, {ttl, key, mod_name})
 
     :ok
   end
@@ -304,23 +306,24 @@ defmodule CompilerCache do
   # Purge the oldest compiled module from the compiler cache.
   # Returns the newly freed mod name and the next oldest TTL
   defp purge(state) do
-    oldest_ttl = :ets.first(state.module.ttl_table)
+    oldest_ttl = :ets.first(state.def.ttl_table)
     purge(oldest_ttl, state)
   end
 
   defp purge(ttl, state) do
-    [{_, key, mod_name}] = :ets.lookup(state.module.ttl_table, ttl)
+    [{_, key, mod_name}] = :ets.lookup(state.def.ttl_table, ttl)
     # Logger.debug "purge: #{mod_name} #{inspect key}"
     :code.purge(mod_name)
     true = :code.delete(mod_name)
-    :ets.delete(state.module.ttl_table, ttl)
-    :ets.delete(state.module.cache_table, key)
+    :ets.delete(state.def.ttl_table, ttl)
+    :ets.delete(state.def.cache_table, key)
     :ets.insert(state.atom_table, {mod_name})
-    next_ttl = :ets.first(state.module.ttl_table)
+    next_ttl = :ets.first(state.def.ttl_table)
     {:ok, mod_name, next_ttl}
   end
 
 
+  @default_input_name :input
   @default_max_size 10000
   @default_cache_misses 1
   @default_max_ttl 1000
@@ -330,13 +333,17 @@ defmodule CompilerCache do
     quote do
       alias CompilerCache
 
-      def max_size, do: unquote(opts[:max_size] || @default_max_size)
-      def cache_misses, do: unquote(opts[:cache_misses] || @default_cache_misses)
-      def max_ttl, do: unquote(opts[:max_ttl] || @default_max_ttl)
-
-      def cache_table, do: unquote(Module.concat(__CALLER__.module, Cache))
-      def ttl_table, do: unquote(Module.concat(__CALLER__.module, TTL))
-      def hit_ctr_table, do: unquote(Module.concat(__CALLER__.module, HitCount))
+      @mod_def %{
+        module: __MODULE__,
+        input_name: unquote(opts[:input_name] || @default_input_name),
+        max_size: unquote(opts[:max_size] || @default_max_size),
+        cache_misses: unquote(opts[:cache_misses] || @default_cache_misses),
+        max_ttl: unquote(opts[:max_ttl] || @default_max_ttl),
+        cache_table: unquote(Module.concat(__CALLER__.module, Cache)),
+        ttl_table: unquote(Module.concat(__CALLER__.module, TTL)),
+        hit_ctr_table: unquote(Module.concat(__CALLER__.module, HitCount))
+      }
+      def config, do: @mod_def
 
       @behaviour CompilerCache
 
@@ -345,11 +352,11 @@ defmodule CompilerCache do
       The cache process is registered under the name of the module.
       """
       def start_link() do
-        CompilerCache.start_link(__MODULE__)
+        CompilerCache.start_link(@mod_def)
       end
 
       def execute(expression, input) do
-        CompilerCache.execute(__MODULE__, expression, input)
+        CompilerCache.execute(@mod_def, expression, input)
       end
 
       def stats do

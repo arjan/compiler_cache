@@ -52,7 +52,6 @@ defmodule CompilerCache do
 
   """
 
-  @module_pos 2
   @ttl_pos 3
 
   @doc """

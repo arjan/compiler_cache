@@ -2,16 +2,18 @@ defmodule CompilerCache.Mixfile do
   use Mix.Project
 
   def project do
-    [app: :compiler_cache,
-     version: "1.1.0",
-     elixir: "~> 1.3",
-     description: description(),
-     package: package(),
-     source_url: "https://github.com/arjan/compiler_cache",
-     homepage_url: "https://github.com/arjan/compiler_cache",
-     build_embedded: Mix.env == :prod,
-     start_permanent: Mix.env == :prod,
-     deps: deps()]
+    [
+      app: :compiler_cache,
+      version: File.read!("VERSION"),
+      elixir: "~> 1.3",
+      description: description(),
+      package: package(),
+      source_url: "https://github.com/arjan/compiler_cache",
+      homepage_url: "https://github.com/arjan/compiler_cache",
+      build_embedded: Mix.env() == :prod,
+      start_permanent: Mix.env() == :prod,
+      deps: deps()
+    ]
   end
 
   defp description do
@@ -19,11 +21,12 @@ defmodule CompilerCache.Mixfile do
   end
 
   defp package do
-    %{files: ["lib", "mix.exs",
-              "*.md", "LICENSE"],
+    %{
+      files: ["lib", "mix.exs", "*.md", "LICENSE"],
       maintainers: ["Arjan Scherpenisse"],
       licenses: ["MIT"],
-      links: %{"GitHub" => "https://github.com/arjan/compiler_cache"}}
+      links: %{"GitHub" => "https://github.com/arjan/compiler_cache"}
+    }
   end
 
   def application do

@@ -87,7 +87,7 @@ defmodule CompilerCache do
         try do
           eval_quoted(mod_def, expression, input)
         rescue
-          error -> mod_def.module.handle_error(error)
+          error -> mod_def.module.handle_error(error, System.stacktrace())
         end
 
       [{^key, compiled_module, ttl}] ->
@@ -126,7 +126,7 @@ defmodule CompilerCache do
       result
     rescue
       e ->
-        module.handle_error(e)
+        module.handle_error(e, System.stacktrace())
     end
   end
 
@@ -362,11 +362,11 @@ defmodule CompilerCache do
         GenServer.call(__MODULE__, :wait_for_completion, :infinity)
       end
 
-      def handle_error(error) do
-        reraise error, System.stacktrace
+      def handle_error(error, stacktrace) do
+        reraise error, stacktrace
       end
 
-      defoverridable [handle_error: 1]
+      defoverridable [handle_error: 2]
 
     end
   end

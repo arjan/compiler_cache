@@ -15,7 +15,7 @@ defmodule Unit.CompilerCache.ContextTest do
       var * var
     end
 
-    def handle_error(e) do
+    def handle_error(e, _stacktrace) do
       IO.inspect e
     end
 

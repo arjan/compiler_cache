@@ -22,7 +22,7 @@ defmodule CompilerCache.Mixfile do
 
   defp package do
     %{
-      files: ["lib", "mix.exs", "*.md", "LICENSE"],
+      files: ["lib", "mix.exs", "*.md", "LICENSE", "VERSION"],
       maintainers: ["Arjan Scherpenisse"],
       licenses: ["MIT"],
       links: %{"GitHub" => "https://github.com/arjan/compiler_cache"}
